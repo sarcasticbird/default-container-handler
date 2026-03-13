@@ -1,0 +1,34 @@
+{
+    "manifest_version": 2,
+    "name": "Default Container Handler",
+    "description": "Opens external links in a default container, with graceful handling when Zen reassigns the tab to a different container.",
+    "version": "1.0.0",
+
+    "icons": {
+        "48": "icon.svg",
+        "96": "icon.svg"
+    },
+
+    "browser_specific_settings": {
+        "gecko": {
+            "id": "default-container-handler@local"
+        }
+    },
+
+    "protocol_handlers": [{
+        "protocol": "ext+container",
+        "name": "Default Container Handler",
+        "uriTemplate": "/opener.html#%s"
+    }],
+
+    "background": {
+        "scripts": ["background.js"]
+    },
+
+    "permissions": [
+        "contextualIdentities",
+        "cookies",
+        "tabs",
+        "webNavigation"
+    ]
+}
