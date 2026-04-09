@@ -6,6 +6,7 @@ const ZEN_GRACE_PERIOD_MS = 300;
 const FALLBACK_TIMEOUT_MS = 2000;
 const PROTOCOL_PREFIX = "ext+container:";
 const OPENER_PATH = "/opener.html#";
+const ALLOWED_SCHEMES = ["http:", "https:"];
 
 const handledTabs = new Set();
 
@@ -21,6 +22,14 @@ function parseParamsFromUrl(tabUrl) {
     const url = qs.get("url");
 
     if (!name || !url) return null;
+
+    try {
+        const parsed = new URL(url);
+        if (!ALLOWED_SCHEMES.includes(parsed.protocol)) return null;
+    } catch (_) {
+        return null;
+    }
+
     return { name, url };
 }
 
@@ -101,8 +110,8 @@ async function findReplacement(capturedTabIds, targetUrl) {
             if (tabBase === baseUrl || pendingBase === baseUrl) {
                 return tab;
             }
-        } catch (_) {
-            // Tab already gone
+        } catch (e) {
+            console.debug("[DefaultContainer] Tab already gone:", e.message);
         }
     }
     // If no URL match, try the highest ID (most recently created) as a heuristic
@@ -110,7 +119,9 @@ async function findReplacement(capturedTabIds, targetUrl) {
         const lastId = capturedTabIds[capturedTabIds.length - 1];
         try {
             return await browser.tabs.get(lastId);
-        } catch (_) {}
+        } catch (e) {
+            console.debug("[DefaultContainer] Replacement tab gone:", e.message);
+        }
     }
     return null;
 }
@@ -119,49 +130,53 @@ async function handleOpenerTab(openerTabId, tabUrl) {
     if (handledTabs.has(openerTabId)) return;
     handledTabs.add(openerTabId);
 
-    const params = parseParamsFromUrl(tabUrl);
-    if (!params) {
-        handledTabs.delete(openerTabId);
-        return;
-    }
-
-    const container = await getOrCreateContainer(params.name);
-
-    await browser.tabs.remove(openerTabId);
-    handledTabs.delete(openerTabId);
-
-    const newTab = await browser.tabs.create({
-        url: params.url,
-        cookieStoreId: container.cookieStoreId,
-        active: false,
-    });
-
-    const { result, capturedTabIds } = await waitForTabSettled(newTab.id);
-
-    if (result === "removed") {
-        const replacement = await findReplacement(capturedTabIds, params.url);
-        if (replacement) {
-            // tabs.update({ active: true }) does NOT trigger Zen's workspace
-            // switch — only tab CREATION does. Create a new active tab in the
-            // same container first (triggers workspace switch), then clean up
-            // Zen's replacement to avoid a brief flash of another tab.
-            const finalTab = await browser.tabs.create({
-                url: params.url,
-                cookieStoreId: replacement.cookieStoreId,
-                active: true,
-            });
-            try {
-                await browser.tabs.remove(replacement.id);
-            } catch (_) {}
-        }
-        return;
-    }
-
-    // Tab wasn't removed — Zen didn't reassign. Activate it.
     try {
-        await browser.tabs.get(newTab.id);
-        await browser.tabs.update(newTab.id, { active: true });
-    } catch (_) {}
+        const params = parseParamsFromUrl(tabUrl);
+        if (!params) return;
+
+        const container = await getOrCreateContainer(params.name);
+
+        await browser.tabs.remove(openerTabId);
+
+        const newTab = await browser.tabs.create({
+            url: params.url,
+            cookieStoreId: container.cookieStoreId,
+            active: false,
+        });
+
+        const { result, capturedTabIds } = await waitForTabSettled(newTab.id);
+
+        if (result === "removed") {
+            const replacement = await findReplacement(capturedTabIds, params.url);
+            if (replacement) {
+                // tabs.update({ active: true }) does NOT trigger Zen's workspace
+                // switch — only tab CREATION does. Create a new active tab in the
+                // same container first (triggers workspace switch), then clean up
+                // Zen's replacement to avoid a brief flash of another tab.
+                await browser.tabs.create({
+                    url: params.url,
+                    cookieStoreId: replacement.cookieStoreId,
+                    active: true,
+                });
+                try {
+                    await browser.tabs.remove(replacement.id);
+                } catch (e) {
+                    console.debug("[DefaultContainer] Could not remove replacement:", e.message);
+                }
+            }
+            return;
+        }
+
+        // Tab wasn't removed — Zen didn't reassign. Activate it.
+        try {
+            await browser.tabs.get(newTab.id);
+            await browser.tabs.update(newTab.id, { active: true });
+        } catch (e) {
+            console.debug("[DefaultContainer] Could not activate tab:", e.message);
+        }
+    } finally {
+        handledTabs.delete(openerTabId);
+    }
 }
 
 // Catch opener tabs as early as possible.

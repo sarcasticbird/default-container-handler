@@ -45,12 +45,12 @@ Change `Personal` to whatever container name you want as your default.
 
 ### Install the extension
 
-1. Download the latest `.zip` from the [releases](https://github.com/sarcasticbird/default-container-handler/releases) page (or build it yourself — see below)
-2. In Zen, go to `about:config` and set `xpinstall.signatures.required` to `false`
-3. Go to `about:addons` → gear icon → **Install Add-on From File** → select the `.zip`
-4. When prompted, select **Default Container Handler** as the protocol handler for `ext+container:` links
+#### From Firefox Add-ons (AMO)
 
-### Building from source
+1. Install from the [Firefox Add-ons page](https://addons.mozilla.org/firefox/addon/default-container-handler/)
+2. When prompted, select **Default Container Handler** as the protocol handler for `ext+container:` links
+
+#### From source (development)
 
 ```sh
 npm install --global web-ext
@@ -58,6 +58,11 @@ web-ext build --source-dir src --artifacts-dir dist
 ```
 
 The built extension will be at `dist/default_container_handler-<version>.zip`.
+
+To install the built extension:
+
+1. In Zen/Firefox, go to `about:addons` → gear icon → **Install Add-on From File** → select the `.zip`
+2. When prompted, select **Default Container Handler** as the protocol handler for `ext+container:` links
 
 ## License
 
